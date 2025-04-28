@@ -1,34 +1,108 @@
-const express = require('express')
-const mongoose = require('mongoose')
-const ShortUrl = require('./models/shortUrl')
-const app = express()
+const express = require('express');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
+const ShortUrl = require('./models/shortUrl');
+const User = require('./models/user');
 
-mongoose.connect('mongodb://localhost/urlShortener', {
-  useNewUrlParser: true, useUnifiedTopology: true
-})
+const app = express();
 
-app.set('view engine', 'ejs')
-app.use(express.urlencoded({ extended: false }))
+// Connect to MongoDB
+mongoose.connect('mongodb://localhost/urlShortener');
 
-app.get('/', async (req, res) => {
-  const shortUrls = await ShortUrl.find()
-  res.render('index', { shortUrls: shortUrls })
-})
+// Set view engine and middleware
+app.set('view engine', 'ejs');
+app.use(express.urlencoded({ extended: false }));
 
-app.post('/shortUrls', async (req, res) => {
-  await ShortUrl.create({ full: req.body.fullUrl })
+// Session middleware
+app.use(session({
+  secret: 'yourSecretKey',
+  resave: false,
+  saveUninitialized: false
+}));
 
-  res.redirect('/')
-})
+// Auth middleware
+function requireLogin(req, res, next) {
+  if (!req.session.userId) {
+    console.log("🔒 Not logged in, redirecting to login");
+    return res.redirect('/login');
+  }
+  console.log("✅ Logged in as:", req.session.userId);
+  next();
+}
 
+// Default route → go to /signup if not logged in
+app.get('/', requireLogin, async (req, res) => {
+  try {
+    const shortUrls = await ShortUrl.find();
+    res.render('index', { shortUrls: shortUrls });
+  } catch (err) {
+    console.error("❌ Error loading dashboard:", err);
+    res.send("Error loading dashboard");
+  }
+});
+
+// Signup page
+app.get('/signup', (req, res) => {
+  res.render('signup');
+});
+
+app.post('/signup', async (req, res) => {
+  try {
+    const user = new User({
+      username: req.body.username,
+      password: req.body.password
+    });
+    await user.save();
+    res.redirect('/login');
+  } catch (err) {
+    console.error("❌ Signup error:", err);
+    res.redirect('/signup');
+  }
+});
+
+// Login page
+app.get('/login', (req, res) => {
+  res.render('login');
+});
+
+app.post('/login', async (req, res) => {
+  const user = await User.findOne({ username: req.body.username });
+  if (user && await bcrypt.compare(req.body.password, user.password)) {
+    req.session.userId = user._id;
+    console.log("✅ Login successful, redirecting to dashboard");
+    res.redirect('/');
+  } else {
+    console.log("❌ Login failed");
+    res.redirect('/login');
+  }
+});
+
+// Logout
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/login');
+  });
+});
+
+// URL Shorten route
+app.post('/shortUrls', requireLogin, async (req, res) => {
+  await ShortUrl.create({ full: req.body.fullUrl });
+  res.redirect('/');
+});
+
+// Redirect short link
 app.get('/:shortUrl', async (req, res) => {
-  const shortUrl = await ShortUrl.findOne({ short: req.params.shortUrl })
-  if (shortUrl == null) return res.sendStatus(404)
+  const shortUrl = await ShortUrl.findOne({ short: req.params.shortUrl });
+  if (!shortUrl) return res.sendStatus(404);
 
-  shortUrl.clicks++
-  shortUrl.save()
+  shortUrl.clicks++;
+  await shortUrl.save();
 
-  res.redirect(shortUrl.full)
-})
+  res.redirect(shortUrl.full);
+});
 
-app.listen(process.env.PORT || 5000);
+// Start server
+app.listen(5000, () => {
+  console.log("🚀 Server started at http://localhost:5000");
+});
