@@ -63,7 +63,7 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-// Login
+// Login page
 app.get('/login', (req, res) => {
   res.render('login');
 });
