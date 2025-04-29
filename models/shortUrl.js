@@ -1,5 +1,5 @@
-const mongoose = require('mongoose')
-const shortId = require('shortid')
+const mongoose = require('mongoose');
+const shortId = require('shortid');
 
 const shortUrlSchema = new mongoose.Schema({
   full: {
@@ -15,7 +15,12 @@ const shortUrlSchema = new mongoose.Schema({
     type: Number,
     required: true,
     default: 0
+  },
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
-})
+});
 
-module.exports = mongoose.model('ShortUrl', shortUrlSchema)
+module.exports = mongoose.model('ShortUrl', shortUrlSchema);
